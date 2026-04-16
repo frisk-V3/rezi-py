@@ -1,7 +1,7 @@
 name: Build POS for 3OS
 
 on:
-  workflow_dispatch:   # ← 手動実行のみ
+  workflow_dispatch:   # ← 手動実行のみ（pushは完全無効）
 
 jobs:
   build-windows:
@@ -25,6 +25,86 @@ jobs:
           copy dist\pos.exe dist_pkg\
           copy items.csv dist_pkg\
           copy receipt.txt dist_pkg\
+          copy sales.csv dist_pkg\
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pos-windows
+          path: dist_pkg
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install py2app
+        run: pip install py2app
+
+      - name: Create setup.py
+        run: |
+          echo "from setuptools import setup
+
+app = ['pos.py']
+options = {'py2app': {'argv_emulation': True}}
+setup(app=app, options=options)" > setup.py
+
+      - name: Build .app
+        run: python3 setup.py py2app
+
+      - name: Prepare artifact
+        run: |
+          mkdir dist_pkg
+          cp -R dist/pos.app dist_pkg/
+          cp items.csv dist_pkg/
+          cp receipt.txt dist_pkg/
+          cp sales.csv dist_pkg/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pos-macos
+          path: dist_pkg
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyInstaller & fpm
+        run: |
+          sudo apt update
+          sudo apt install -y ruby ruby-dev build-essential
+          sudo gem install --no-document fpm
+          pip install pyinstaller
+
+      - name: Build Linux binary
+        run: pyinstaller pos.py --onefile --name pos
+
+      - name: Create .deb package
+        run: |
+          mkdir -p pkg/usr/local/bin
+          cp dist/pos pkg/usr/local/bin/
+          fpm -s dir -t deb -n pos -v 1.0 pkg/
+
+      - name: Prepare artifact
+        run: |
+          mkdir dist_pkg
+          cp *.deb dist_pkg/
+          cp items.csv dist_pkg/
+          cp receipt.txt dist_pkg/
+          cp sales.csv dist_pkg/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pos-linux
+          path: dist_pkg
           copy sales.csv dist_pkg\
 
       - uses: actions/upload-artifact@v4
