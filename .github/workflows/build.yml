@@ -1,9 +1,7 @@
 name: Build POS for 3OS
 
 on:
-  push:
-    branches: [ main ]   # ← main に push したら自動で開始
-  workflow_dispatch:      # ← 手動実行も可能
+  workflow_dispatch:   # ← 手動実行のみ
 
 jobs:
   build-windows:
