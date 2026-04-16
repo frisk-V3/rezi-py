@@ -1,4 +1,4 @@
-name: Build POS
+name: Build POS for 3OS
 
 on:
   push:
@@ -6,43 +6,104 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  build-windows:
+    runs-on: windows-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Run POS test
-        run: |
-          python3 pos.py --help || true
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build EXE
+        run: pyinstaller pos.py --onefile --name pos
 
       - name: Prepare artifact
         run: |
-          mkdir dist
-          cp pos.py dist/
-          cp items.csv dist/
-          cp receipt.txt dist/
-          touch dist/sales.csv
+          mkdir dist_pkg
+          copy dist\pos.exe dist_pkg\
+          copy items.csv dist_pkg\
+          copy receipt.txt dist_pkg\
+          copy sales.csv dist_pkg\
 
-      - name: Zip artifact
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pos-windows
+          path: dist_pkg
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install py2app
+        run: pip install py2app
+
+      - name: Create setup.py
         run: |
-          cd dist
-          zip -r pos_app.zip .
+          echo "from setuptools import setup
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: pos_app
-          path: dist/pos_app.zip
+app = ['pos.py']
+options = {'py2app': {'argv_emulation': True}}
+setup(app=app, options=options)" > setup.py
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Build .app
+        run: python3 setup.py py2app
+
+      - name: Prepare artifact
+        run: |
+          mkdir dist_pkg
+          cp -R dist/pos.app dist_pkg/
+          cp items.csv dist_pkg/
+          cp receipt.txt dist_pkg/
+          cp sales.csv dist_pkg/
+
+      - uses: actions/upload-artifact@v4
         with:
-          files: dist/pos_app.zip
+          name: pos-macos
+          path: dist_pkg
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyInstaller & fpm
+        run: |
+          sudo apt update
+          sudo apt install -y ruby ruby-dev build-essential
+          sudo gem install --no-document fpm
+          pip install pyinstaller
+
+      - name: Build Linux binary
+        run: pyinstaller pos.py --onefile --name pos
+
+      - name: Create .deb package
+        run: |
+          mkdir -p pkg/usr/local/bin
+          cp dist/pos pkg/usr/local/bin/
+          fpm -s dir -t deb -n pos -v 1.0 pkg/
+
+      - name: Prepare artifact
+        run: |
+          mkdir dist_pkg
+          cp *.deb dist_pkg/
+          cp items.csv dist_pkg/
+          cp receipt.txt dist_pkg/
+          cp sales.csv dist_pkg/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pos-linux
+          path: dist_pkg
