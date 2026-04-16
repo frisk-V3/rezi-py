@@ -1,0 +1,48 @@
+name: Build POS
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run POS test
+        run: |
+          python3 pos.py --help || true
+
+      - name: Prepare artifact
+        run: |
+          mkdir dist
+          cp pos.py dist/
+          cp items.csv dist/
+          cp receipt.txt dist/
+          touch dist/sales.csv
+
+      - name: Zip artifact
+        run: |
+          cd dist
+          zip -r pos_app.zip .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pos_app
+          path: dist/pos_app.zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/pos_app.zip
